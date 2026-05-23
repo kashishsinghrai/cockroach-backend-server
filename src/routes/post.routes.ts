@@ -10,6 +10,7 @@ import {
   getComments,
   getReels,
   deletePost,
+  voteOnPoll,
 } from '../controllers/post.controller';
 import { authenticate } from '../middleware/authenticate';
 
@@ -41,6 +42,9 @@ router.post('/:id/repost', authenticate, repost);
 // Comments
 router.post('/:id/comments', authenticate, addComment);
 router.get('/:id/comments', authenticate, getComments);
+
+// Poll Vote
+router.post('/:id/poll/vote', authenticate, voteOnPoll);
 
 // Delete post
 router.delete('/:id', authenticate, deletePost);

@@ -12,6 +12,12 @@ export interface IPost extends Document {
   likesCount: number;
   repostsCount: number;
   commentsCount: number;
+  replySetting: 'everyone' | 'following' | 'mentioned';
+  poll?: {
+    question: string;
+    options: { text: string; votes: number }[];
+    votedUsers: Map<string, number>;
+  };
   // For reposts
   isRepost: boolean;
   originalPost?: mongoose.Types.ObjectId;
@@ -31,6 +37,12 @@ const PostSchema: Schema = new Schema(
     // Rationale: We store the array of likes (ObjectIds) to know *who* liked a post.
     // However, for feed rendering, counting array length is slow for thousands of posts.
     // Therefore, we denormalize the count into `likesCount` which is updated atomically via $inc.
+    replySetting: { type: String, enum: ['everyone', 'following', 'mentioned'], default: 'everyone' },
+    poll: {
+      question: { type: String },
+      options: [{ text: String, votes: { type: Number, default: 0 } }],
+      votedUsers: { type: Map, of: Number }, // Map of user Id strings to option index
+    },
     likes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     likesCount: { type: Number, default: 0, min: 0 },
     repostsCount: { type: Number, default: 0, min: 0 },

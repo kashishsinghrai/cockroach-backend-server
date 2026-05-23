@@ -179,3 +179,50 @@ export const getStoryViewers = async (req: Request, res: Response): Promise<void
     res.status(500).json({ message: 'Failed to fetch story viewers' });
   }
 };
+
+export const getUserStories = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const targetUserId = req.params.userId;
+    
+    // Fetch active stories for this specific user
+    const stories = await Story.find({
+      author: targetUserId,
+      expiresAt: { $gt: new Date() }
+    })
+    .populate('author', 'username displayName avatarUrl isVerified')
+    .sort({ createdAt: 1 })
+    .lean();
+    
+    res.status(200).json({ stories });
+  } catch (error) {
+    console.error('Error fetching user stories:', error);
+    res.status(500).json({ message: 'Failed to fetch user stories' });
+  }
+};
+
+export const deleteStory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?._id;
+    const storyId = req.params.id;
+
+    if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
+
+    const story = await Story.findById(storyId);
+    
+    if (!story) {
+      res.status(404).json({ message: 'Story not found' });
+      return;
+    }
+
+    if (story.author.toString() !== userId.toString()) {
+      res.status(403).json({ message: 'You can only delete your own stories' });
+      return;
+    }
+
+    await Story.findByIdAndDelete(storyId);
+    res.status(200).json({ success: true, message: 'Story deleted' });
+  } catch (error) {
+    console.error('Error deleting story:', error);
+    res.status(500).json({ message: 'Failed to delete story' });
+  }
+};

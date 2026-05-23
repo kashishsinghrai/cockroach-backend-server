@@ -35,13 +35,22 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 10000): Promise<T> => 
 // ---------------------------------------------------------------------------
 export const createPost = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { content, useAudioUrl, originalAudioId } = req.body;
+    const { content, useAudioUrl, originalAudioId, replySetting, poll } = req.body;
     const userId = req.user?._id;
 
     if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
-    // A Drop is valid if it has text, an image, or both
-    if (!content?.trim() && !req.file) {
-      res.status(400).json({ message: 'A Drop requires at least text, an image, or a video.' });
+    // A Drop is valid if it has text, an image, a video, or a poll
+    let parsedPoll: any = undefined;
+    if (poll) {
+      try {
+        parsedPoll = typeof poll === 'string' ? JSON.parse(poll) : poll;
+      } catch (e) {
+        console.error('Failed to parse poll:', e);
+      }
+    }
+
+    if (!content?.trim() && !req.file && !parsedPoll) {
+      res.status(400).json({ message: 'A Drop requires text, media, or a poll.' });
       return;
     }
 
@@ -111,7 +120,9 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
       videoUrl, 
       audioUrl,
       originalAudioId: originalAudioId || undefined,
-      mediaType 
+      mediaType,
+      replySetting: replySetting || 'everyone',
+      poll: parsedPoll
     });
     const savedPost = await newPost.save();
 
@@ -357,6 +368,21 @@ export const addComment = async (req: Request, res: Response): Promise<void> => 
     const post = await Post.findById(postId);
     if (!post) { res.status(404).json({ success: false, error: 'Post not found' }); return; }
 
+    // Enforce replySetting
+    if (post.replySetting === 'following') {
+      const isFollowing = await FollowerGraph.findOne({ followerId: post.author, followingId: userId });
+      if (!isFollowing && post.author.toString() !== userId.toString()) {
+        res.status(403).json({ success: false, error: 'Only people the author follows can reply' });
+        return;
+      }
+    } else if (post.replySetting === 'mentioned') {
+      const user = await User.findById(userId);
+      if (user && !post.content.includes(`@${user.username}`) && post.author.toString() !== userId.toString()) {
+        res.status(403).json({ success: false, error: 'Only people mentioned can reply' });
+        return;
+      }
+    }
+
     const comment = new Comment({ post: postId, author: userId, content: content.trim() });
     await comment.save();
 
@@ -430,6 +456,50 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
     res.status(200).json({ success: true, message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// VOTE ON POLL
+// ---------------------------------------------------------------------------
+export const voteOnPoll = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const postId = String(req.params.id);
+    const userId = req.user?._id;
+    const { optionIndex } = req.body;
+
+    if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+    if (!mongoose.isValidObjectId(postId)) { res.status(400).json({ success: false, error: 'Invalid post ID' }); return; }
+    if (typeof optionIndex !== 'number') { res.status(400).json({ success: false, error: 'Option index is required' }); return; }
+
+    const post = await Post.findById(postId);
+    if (!post) { res.status(404).json({ success: false, error: 'Post not found' }); return; }
+    if (!post.poll || !post.poll.options) { res.status(400).json({ success: false, error: 'Post does not have a poll' }); return; }
+
+    const userIdStr = userId.toString();
+    if (!post.poll.votedUsers) {
+      post.poll.votedUsers = new Map();
+    }
+
+    if (post.poll.votedUsers.has(userIdStr)) {
+      res.status(400).json({ success: false, error: 'You have already voted on this poll' });
+      return;
+    }
+
+    if (optionIndex < 0 || optionIndex >= post.poll.options.length) {
+      res.status(400).json({ success: false, error: 'Invalid option index' });
+      return;
+    }
+
+    post.poll.options[optionIndex].votes += 1;
+    post.poll.votedUsers.set(userIdStr, optionIndex);
+
+    await post.save();
+
+    res.status(200).json({ success: true, data: post.poll });
+  } catch (error) {
+    console.error('Error voting on poll:', error);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
