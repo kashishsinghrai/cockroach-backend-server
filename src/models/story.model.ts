@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IStory extends Document {
   author: mongoose.Types.ObjectId;
+  authorGender?: 'male' | 'female' | 'other';
   mediaUrl: string;
   mediaType: 'image' | 'video';
   thumbnailUrl?: string; // Optional if we generate it for video stories later
@@ -13,6 +14,7 @@ export interface IStory extends Document {
 const StorySchema: Schema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorGender: { type: String, enum: ['male', 'female', 'other'] },
     mediaUrl: { type: String, required: true },
     mediaType: { type: String, enum: ['image', 'video'], required: true },
     thumbnailUrl: { type: String },

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { getUserProfile, getUserPosts, toggleFollow, updateProfile, updateSettings, getSettings, getFollowers, getFollowing, deleteAccount, verifyRequest, getBlockedUsers, unblockUser, getMutuals } from '../controllers/user.controller';
+import { getUserProfile, getUserPosts, toggleFollow, updateProfile, updateCommunityPreference, updateSettings, getSettings, getFollowers, getFollowing, deleteAccount, verifyRequest, getBlockedUsers, unblockUser, getMutuals } from '../controllers/user.controller';
 import { authenticate } from '../middleware/authenticate';
 
 const router = Router();
@@ -12,6 +12,9 @@ const upload = multer({
 
 // PUT /api/users/profile — update own profile (must be before /:username)
 router.put('/profile', authenticate, upload.fields([{ name: 'avatar', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), updateProfile);
+
+// PUT /api/users/profile/community — update community preference
+router.put('/profile/community', authenticate, updateCommunityPreference);
 
 // GET /api/users/settings - get preferences
 router.get('/settings', authenticate, getSettings);

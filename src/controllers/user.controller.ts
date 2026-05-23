@@ -271,6 +271,30 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     }
 };
 
+// PUT /api/users/profile/community — Update community preference
+export const updateCommunityPreference = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+
+    const { communityPreference } = req.body;
+    if (!['male', 'female', 'everyone'].includes(communityPreference)) {
+      res.status(400).json({ success: false, error: 'Invalid community preference' }); return;
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      userId,
+      { $set: { communityPreference } },
+      { new: true, runValidators: true }
+    ).select('communityPreference');
+
+    res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[USER] updateCommunityPreference error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update community preference' });
+  }
+};
+
 // GET /api/users/settings - get preferences
 export const getSettings = async (req: Request, res: Response): Promise<void> => {
   try {

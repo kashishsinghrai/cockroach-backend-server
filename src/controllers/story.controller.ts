@@ -25,6 +25,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 10000): Promise<T> => 
 export const createStory = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?._id;
+    const authorGender = req.user?.gender;
     if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
     if (!req.file) {
@@ -51,6 +52,7 @@ export const createStory = async (req: Request, res: Response): Promise<void> =>
 
     const newStory = new Story({
       author: userId,
+      authorGender,
       mediaUrl: s3Url,
       mediaType,
       expiresAt,
@@ -87,11 +89,17 @@ export const getFeedStories = async (req: Request, res: Response): Promise<void>
     followingIds.push(new mongoose.Types.ObjectId(userId));
 
     // 2. Fetch active stories for these users
-    const stories = await Story.find({
+    const query: any = {
       author: { $in: followingIds },
-      // TTL takes care of deletion, but just to be safe in case of slight delays:
       expiresAt: { $gt: new Date() }
-    })
+    };
+    
+    // Community filtering
+    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+      query.authorGender = req.user.communityPreference;
+    }
+
+    const stories = await Story.find(query)
     .populate('author', 'username displayName avatarUrl isVerified')
     .sort({ createdAt: 1 })
     .lean(); // Oldest active story first

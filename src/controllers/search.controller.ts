@@ -23,12 +23,18 @@ export const searchUsers = async (req: Request, res: Response): Promise<void> =>
     const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(safeQuery, 'i');
 
-    const users = await User.find({
+    const queryParams: any = {
       $and: [
         { role: { $ne: 'admin' } },
         { $or: [{ username: { $regex: regex } }, { displayName: { $regex: regex } }] }
       ]
-    })
+    };
+
+    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+      queryParams.$and.push({ gender: req.user.communityPreference });
+    }
+
+    const users = await User.find(queryParams)
       .select('username displayName avatarUrl followersCount isVerified')
       .limit(20)
       .lean();
@@ -72,8 +78,14 @@ export const searchUsers = async (req: Request, res: Response): Promise<void> =>
  */
 export const getTrending = async (req: Request, res: Response): Promise<void> => {
   try {
+    const queryParams: any = { role: { $ne: 'admin' } };
+    
+    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+      queryParams.gender = req.user.communityPreference;
+    }
+
     // Return top users by follower count as "recommended to follow", excluding admins
-    const recommendedUsers = await User.find({ role: { $ne: 'admin' } })
+    const recommendedUsers = await User.find(queryParams)
       .select('username displayName avatarUrl followersCount isVerified')
       .sort({ followersCount: -1 })
       .limit(10);

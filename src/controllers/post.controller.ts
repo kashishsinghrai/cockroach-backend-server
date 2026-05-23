@@ -37,6 +37,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
   try {
     const { content, useAudioUrl, originalAudioId, replySetting, poll } = req.body;
     const userId = req.user?._id;
+    const authorGender = req.user?.gender;
 
     if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
     // A Drop is valid if it has text, an image, a video, or a poll
@@ -121,6 +122,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
       audioUrl,
       originalAudioId: originalAudioId || undefined,
       mediaType,
+      authorGender,
       replySetting: replySetting || 'everyone',
       poll: parsedPoll
     });
@@ -169,10 +171,17 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
     followingIds.push(new mongoose.Types.ObjectId(userId));
 
     // Step 3: Fetch posts where author is in followingIds
-    const posts = await Post.find({ 
+    const query: any = {
       author: { $in: followingIds },
-      mediaType: { $ne: 'video' } 
-    })
+      mediaType: { $ne: 'video' }
+    };
+    
+    // Community filtering
+    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+      query.authorGender = req.user.communityPreference;
+    }
+
+    const posts = await Post.find(query)
       .populate('author', 'username displayName avatarUrl isVerified')
       .sort({ createdAt: -1 })
       .limit(100)
@@ -231,8 +240,15 @@ export const getReels = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?._id;
 
+    const query: any = { mediaType: 'video' };
+    
+    // Community filtering
+    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+      query.authorGender = req.user.communityPreference;
+    }
+
     // Fetch globally available posts that are videos
-    const posts = await Post.find({ mediaType: 'video' })
+    const posts = await Post.find(query)
       .populate({ path: 'author', select: 'username displayName avatarUrl isVerified gender', match: { role: { $ne: 'admin' } } })
       .sort({ createdAt: -1 })
       .limit(50);

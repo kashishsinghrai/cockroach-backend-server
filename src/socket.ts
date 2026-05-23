@@ -1,6 +1,8 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
+import { User } from './models/User.model';
+
 let ioInstance: Server | null = null;
 
 // Map of userId -> Set of socketIds
@@ -61,8 +63,29 @@ export function initializeSocket(httpServer: HttpServer) {
     });
 
     // --- Chat Request Handshake ---
-    socket.on('chat_request', (data: { targetUserId: string; callerId: string; callerUsername: string }) => {
+    socket.on('chat_request', async (data: { targetUserId: string; callerId: string; callerUsername: string }) => {
       console.log(`[SOCKET] chat_request from ${data.callerId} to ${data.targetUserId}`);
+      
+      try {
+        const caller = await User.findById(data.callerId).select('gender communityPreference');
+        const target = await User.findById(data.targetUserId).select('gender communityPreference');
+        
+        if (target && caller) {
+          // If target has a strict community preference and the caller doesn't match, block it.
+          if (target.communityPreference !== 'everyone' && target.communityPreference !== caller.gender) {
+            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
+            return;
+          }
+          // Also check caller's preference
+          if (caller.communityPreference !== 'everyone' && caller.communityPreference !== target.gender) {
+            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('[SOCKET] Error checking community preferences for chat:', err);
+      }
+
       emitToUser(data.targetUserId, 'chat_request', data);
     });
 

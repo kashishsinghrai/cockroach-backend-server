@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IPost extends Document {
   author: mongoose.Types.ObjectId;
+  authorGender?: 'male' | 'female' | 'other';
   content: string;
   mediaUrls: string[];
   videoUrl?: string;
@@ -28,6 +29,7 @@ export interface IPost extends Document {
 const PostSchema: Schema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorGender: { type: String, enum: ['male', 'female', 'other'] },
     content: { type: String, default: '', maxlength: 500 },
     mediaUrls: [{ type: String }],
     videoUrl: { type: String, required: false },

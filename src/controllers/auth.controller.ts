@@ -64,6 +64,7 @@ export async function register(req: Request, res: Response): Promise<void> {
       username: username.toLowerCase().trim(),
       email: email.toLowerCase().trim(),
       gender: gender,
+      communityPreference: gender === 'male' || gender === 'female' ? gender : 'everyone',
       passwordHash: password, // Argon2id pre-save hook hashes this
       displayName: displayName.trim(),
       accountStatus: AccountStatus.ACTIVE,
@@ -82,7 +83,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     res.status(201).json({
       success: true,
       data: {
-        user: { id: user._id, username: user.username, email: user.email, displayName: user.displayName, gender: user.gender, avatarUrl: user.avatarUrl, role: user.role },
+        user: { id: user._id, username: user.username, email: user.email, displayName: user.displayName, gender: user.gender, communityPreference: user.communityPreference, avatarUrl: user.avatarUrl, role: user.role },
         tokens: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresIn: '15m' },
       },
     });
@@ -151,7 +152,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     res.status(200).json({
       success: true,
       data: {
-        user: { id: user._id, username: user.username, email: user.email, displayName: user.displayName, gender: user.gender, avatarUrl: user.avatarUrl, isVerified: user.isVerified, role: user.role },
+        user: { id: user._id, username: user.username, email: user.email, displayName: user.displayName, gender: user.gender, communityPreference: user.communityPreference, avatarUrl: user.avatarUrl, isVerified: user.isVerified, role: user.role },
         tokens: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresIn: '15m' },
       },
     });

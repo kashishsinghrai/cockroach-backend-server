@@ -70,6 +70,7 @@ export interface IUser extends Document {
   username: string;
   email: string;
   gender: 'male' | 'female' | 'other';
+  communityPreference: 'male' | 'female' | 'everyone';
   role: 'user' | 'admin';
   passwordHash: string;
   displayName: string;
@@ -192,6 +193,11 @@ const UserSchema = new Schema<IUser, IUserModel>(
       type: String,
       enum: ['male', 'female', 'other'],
       required: [true, 'Gender is required'],
+    },
+    communityPreference: {
+      type: String,
+      enum: ['male', 'female', 'everyone'],
+      default: 'everyone',
     },
     role: {
       type: String,
