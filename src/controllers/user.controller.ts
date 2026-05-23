@@ -192,6 +192,42 @@ export const toggleFollow = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ success: false, error: 'Failed to update follow status' });
   }
 };
+// DELETE /api/users/:username/follower — Remove a follower
+export const removeFollower = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+
+    const targetUser = await User.findOne({ username: req.params.username });
+    if (!targetUser) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Check if the target user actually follows the current user
+    const existingFollow = await FollowerGraph.findOne({
+      followerId: targetUser._id,
+      followingId: userId,
+    });
+
+    if (existingFollow) {
+      await FollowerGraph.deleteOne({ followerId: targetUser._id, followingId: userId });
+      await User.updateOne({ _id: userId }, { $inc: { followersCount: -1 } });
+      await User.updateOne({ _id: targetUser._id }, { $inc: { followingCount: -1 } });
+      
+      // Remove follow notification
+      await Notification.deleteOne({ recipient: userId, actor: targetUser._id, type: NotificationType.FOLLOW });
+
+      res.status(200).json({ success: true, message: 'Follower removed' });
+    } else {
+      res.status(400).json({ success: false, error: 'User is not following you' });
+    }
+  } catch (err: unknown) {
+    console.error('[USER] removeFollower error:', (err as Error).message);
+    res.status(500).json({ success: false, error: 'Failed to remove follower' });
+  }
+};
+
 
 // PUT /api/users/profile — Update own profile
 export const updateProfile = async (req: Request, res: Response): Promise<void> => {

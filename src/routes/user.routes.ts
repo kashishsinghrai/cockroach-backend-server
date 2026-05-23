@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { getUserProfile, getUserPosts, toggleFollow, updateProfile, updateCommunityPreference, updateSettings, getSettings, getFollowers, getFollowing, deleteAccount, verifyRequest, getBlockedUsers, unblockUser, getMutuals } from '../controllers/user.controller';
+import { getUserProfile, getUserPosts, toggleFollow, removeFollower, updateProfile, updateCommunityPreference, updateSettings, getSettings, getFollowers, getFollowing, deleteAccount, verifyRequest, getBlockedUsers, unblockUser, getMutuals } from '../controllers/user.controller';
 import { authenticate } from '../middleware/authenticate';
 
 const router = Router();
@@ -39,6 +39,9 @@ router.get('/:username/following', authenticate, getFollowing);
 
 // POST /api/users/:username/follow
 router.post('/:username/follow', authenticate, toggleFollow);
+
+// DELETE /api/users/:username/follower
+router.delete('/:username/follower', authenticate, removeFollower);
 
 // DELETE /api/users/account
 router.delete('/account', authenticate, deleteAccount);

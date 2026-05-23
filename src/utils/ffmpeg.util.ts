@@ -57,10 +57,13 @@ export const mergeVideoWithAudioUrl = (videoBuffer: Buffer, audioUrl: string): P
     https.get(audioUrl, (response) => {
       response.pipe(file);
       file.on('finish', () => {
-        file.close();
-
-        // Merge video and downloaded audio
-        ffmpeg()
+        file.close((err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          // Merge video and downloaded audio
+          ffmpeg()
           .input(tempVideoPath)
           .input(tempAudioPath)
           .outputOptions([
@@ -88,6 +91,7 @@ export const mergeVideoWithAudioUrl = (videoBuffer: Buffer, audioUrl: string): P
             if (fs.existsSync(tempOutputPath)) fs.unlinkSync(tempOutputPath);
             reject(err);
           });
+        });
       });
     }).on('error', (err) => {
       fs.unlinkSync(tempAudioPath);

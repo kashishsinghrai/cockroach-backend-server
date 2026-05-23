@@ -41,9 +41,12 @@ const PostSchema: Schema = new Schema(
     // Therefore, we denormalize the count into `likesCount` which is updated atomically via $inc.
     replySetting: { type: String, enum: ['everyone', 'following', 'mentioned'], default: 'everyone' },
     poll: {
-      question: { type: String },
-      options: [{ text: String, votes: { type: Number, default: 0 } }],
-      votedUsers: { type: Map, of: Number }, // Map of user Id strings to option index
+      type: {
+        question: { type: String },
+        options: [{ text: String, votes: { type: Number, default: 0 } }],
+        votedUsers: { type: Map, of: Number }, // Map of user Id strings to option index
+      },
+      default: undefined
     },
     likes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     likesCount: { type: Number, default: 0, min: 0 },
