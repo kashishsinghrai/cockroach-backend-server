@@ -20,7 +20,19 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/cockroach-app/backend
+            if [ -d "$HOME/cockroach-app" ]; then
+              cd $HOME/cockroach-app
+            elif [ -d "$HOME/cockroach-backend-server" ]; then
+              cd $HOME/cockroach-backend-server
+            else
+              echo "Project directory not found!"
+              exit 1
+            fi
+            
+            if [ -d "backend" ]; then
+              cd backend
+            fi
+            
             git pull origin main
             npm install
             npm run build
