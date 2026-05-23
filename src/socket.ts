@@ -78,15 +78,9 @@ export function initializeSocket(httpServer: HttpServer) {
           const isMutualFriends = isTargetFollowingCaller && isCallerFollowingTarget;
 
           if (!isMutualFriends) {
-            // If not mutual friends, enforce strict community preference block
-            if (target.communityPreference !== 'everyone' && target.communityPreference !== caller.gender) {
-              emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
-              return;
-            }
-            if (caller.communityPreference !== 'everyone' && caller.communityPreference !== target.gender) {
-              emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
-              return;
-            }
+            // Strictly enforce friends-only chat
+            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'friends_only' });
+            return;
           }
         }
       } catch (err) {
