@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
 import { User } from './models/User.model';
+import FollowerGraph from './models/FollowerGraph.model';
 
 let ioInstance: Server | null = null;
 
@@ -71,15 +72,21 @@ export function initializeSocket(httpServer: HttpServer) {
         const target = await User.findById(data.targetUserId).select('gender communityPreference');
         
         if (target && caller) {
-          // If target has a strict community preference and the caller doesn't match, block it.
-          if (target.communityPreference !== 'everyone' && target.communityPreference !== caller.gender) {
-            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
-            return;
-          }
-          // Also check caller's preference
-          if (caller.communityPreference !== 'everyone' && caller.communityPreference !== target.gender) {
-            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
-            return;
+          // Check if they are mutual followers (friends)
+          const isTargetFollowingCaller = await FollowerGraph.exists({ followerId: target._id, followingId: caller._id });
+          const isCallerFollowingTarget = await FollowerGraph.exists({ followerId: caller._id, followingId: target._id });
+          const isMutualFriends = isTargetFollowingCaller && isCallerFollowingTarget;
+
+          if (!isMutualFriends) {
+            // If not mutual friends, enforce strict community preference block
+            if (target.communityPreference !== 'everyone' && target.communityPreference !== caller.gender) {
+              emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
+              return;
+            }
+            if (caller.communityPreference !== 'everyone' && caller.communityPreference !== target.gender) {
+              emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'community_restricted' });
+              return;
+            }
           }
         }
       } catch (err) {

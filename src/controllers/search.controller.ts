@@ -30,7 +30,10 @@ export const searchUsers = async (req: Request, res: Response): Promise<void> =>
       ]
     };
 
-    if (req.user?.communityPreference && req.user.communityPreference !== 'everyone') {
+    const genderFilter = req.query.genderFilter as string;
+    if (genderFilter === 'male' || genderFilter === 'female') {
+      queryParams.$and.push({ gender: genderFilter });
+    } else if (req.user?.communityPreference && req.user.communityPreference !== 'everyone' && genderFilter !== 'everyone') {
       queryParams.$and.push({ gender: req.user.communityPreference });
     }
 
