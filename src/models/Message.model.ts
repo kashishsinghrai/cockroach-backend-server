@@ -4,6 +4,8 @@ export interface IMessage extends Document {
   senderId: mongoose.Types.ObjectId;
   receiverId: mongoose.Types.ObjectId;
   text: string;
+  isEdited: boolean;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
   expiresAt?: Date; // For auto-deletion 2 hours after going offline
@@ -14,6 +16,8 @@ const MessageSchema = new Schema<IMessage>(
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     receiverId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     text: { type: String, required: true, trim: true, maxlength: 2000 },
+    isEdited: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
     expiresAt: { type: Date, default: null }, // Null means it stays until set
   },
   { timestamps: true }

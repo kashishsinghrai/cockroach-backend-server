@@ -84,6 +84,58 @@ export function initializeSocket(httpServer: HttpServer) {
       }
     });
 
+    socket.on('edit_message', async (data: { messageId: string; newText: string }) => {
+      try {
+        const { messageId, newText } = data;
+        const userId = socketToUser.get(socket.id);
+        if (!userId || !messageId || !newText) return;
+
+        const message = await Message.findById(messageId);
+        if (!message) return;
+
+        if (message.senderId.toString() !== userId) {
+          emitToUser(userId, 'message_error', { error: 'You can only edit your own messages.' });
+          return;
+        }
+
+        message.text = newText;
+        message.isEdited = true;
+        await message.save();
+
+        const receiverId = message.receiverId.toString();
+        emitToUser(receiverId, 'message_edited', message);
+        emitToUser(userId, 'message_edited', message);
+      } catch (err) {
+        console.error('[SOCKET] edit_message error:', err);
+      }
+    });
+
+    socket.on('delete_message', async (data: { messageId: string }) => {
+      try {
+        const { messageId } = data;
+        const userId = socketToUser.get(socket.id);
+        if (!userId || !messageId) return;
+
+        const message = await Message.findById(messageId);
+        if (!message) return;
+
+        if (message.senderId.toString() !== userId) {
+          emitToUser(userId, 'message_error', { error: 'You can only delete your own messages.' });
+          return;
+        }
+
+        message.isDeleted = true;
+        message.text = ''; // Clear content for privacy
+        await message.save();
+
+        const receiverId = message.receiverId.toString();
+        emitToUser(receiverId, 'message_deleted', message);
+        emitToUser(userId, 'message_deleted', message);
+      } catch (err) {
+        console.error('[SOCKET] delete_message error:', err);
+      }
+    });
+
     // --- Disconnect ---
     socket.on('disconnect', () => {
       console.log(`[SOCKET] User disconnected: ${socket.id}`);
