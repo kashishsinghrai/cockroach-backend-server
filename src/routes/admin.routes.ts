@@ -3,6 +3,11 @@ import { authenticate } from '../middleware/authenticate';
 import { isAdmin } from '../middleware/isAdmin';
 import { User } from '../models/User.model';
 import Post from '../models/Post.model';
+import { Settings } from '../models/Settings.model';
+import Story from '../models/story.model';
+import Notification from '../models/Notification.model';
+import FollowerGraph from '../models/FollowerGraph.model';
+import Comment from '../models/Comment.model';
 
 const router = Router();
 
@@ -145,6 +150,102 @@ router.delete('/posts/:id', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[ADMIN] Delete Post Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PUT /api/admin/settings
+router.put('/settings', async (req: Request, res: Response) => {
+  try {
+    const { isScreenProtectorEnabled } = req.body;
+    let settings = await Settings.findOne();
+    if (!settings) {
+      settings = new Settings();
+    }
+    
+    if (typeof isScreenProtectorEnabled === 'boolean') {
+      settings.isScreenProtectorEnabled = isScreenProtectorEnabled;
+    }
+    
+    await settings.save();
+    
+    res.status(200).json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    console.error('[ADMIN] Update Settings Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/create-admin
+router.post('/create-admin', async (req: Request, res: Response) => {
+  try {
+    const { username, email, password, displayName } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    if (existingUser) {
+      res.status(400).json({ success: false, error: 'User with this email or username already exists' });
+      return;
+    }
+
+    const newAdmin = new User({
+      username,
+      email,
+      passwordHash: password, // Pre-save hook will hash this using Argon2
+      displayName,
+      gender: 'other', // Default or require in body, setting default here
+      role: 'admin',
+      isVerified: true, // Admins can be verified by default
+    });
+
+    await newAdmin.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin created successfully',
+      data: {
+        id: newAdmin._id,
+        username: newAdmin.username,
+        email: newAdmin.email,
+      }
+    });
+  } catch (error) {
+    console.error('[ADMIN] Create Admin Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/users/:id
+router.delete('/users/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Cascading Delete
+    await Promise.all([
+      Post.deleteMany({ author: id }),
+      Story.deleteMany({ author: id }),
+      Comment.deleteMany({ author: id }),
+      Notification.deleteMany({ $or: [{ recipient: id }, { sender: id }] }),
+      FollowerGraph.deleteMany({ $or: [{ followerId: id }, { followingId: id }] }),
+    ]);
+
+    await User.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'User and all associated data deleted successfully',
+    });
+  } catch (error) {
+    console.error('[ADMIN] Delete User Error:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

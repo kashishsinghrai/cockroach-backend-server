@@ -30,6 +30,7 @@ import notificationRoutes from './routes/notification.routes';
 import supportRoutes from './routes/support.routes';
 import adminRoutes from './routes/admin.routes';
 import storyRoutes from './routes/story.routes';
+import settingsRoutes from './routes/settings.routes';
 
 // ---------------------------------------------------------------------------
 // Initialize Express
@@ -193,6 +194,9 @@ console.log('[APP] Routes mounted: /api/admin');
 
 app.use('/api/stories', storyRoutes);
 console.log('[APP] Routes mounted: /api/stories');
+
+app.use('/api/settings', settingsRoutes);
+console.log('[APP] Routes mounted: /api/settings');
 
 // ---------------------------------------------------------------------------
 // 404 Handler
