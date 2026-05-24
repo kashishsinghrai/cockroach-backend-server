@@ -31,6 +31,7 @@ import supportRoutes from './routes/support.routes';
 import adminRoutes from './routes/admin.routes';
 import storyRoutes from './routes/story.routes';
 import settingsRoutes from './routes/settings.routes';
+import chatRoutes from './routes/chat.routes';
 
 // ---------------------------------------------------------------------------
 // Initialize Express
@@ -197,6 +198,9 @@ console.log('[APP] Routes mounted: /api/stories');
 
 app.use('/api/settings', settingsRoutes);
 console.log('[APP] Routes mounted: /api/settings');
+
+app.use('/api/chat', chatRoutes);
+console.log('[APP] Routes mounted: /api/chat');
 
 // ---------------------------------------------------------------------------
 // 404 Handler

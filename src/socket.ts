@@ -3,6 +3,7 @@ import { Server, Socket } from 'socket.io';
 
 import { User } from './models/User.model';
 import FollowerGraph from './models/FollowerGraph.model';
+import Message from './models/Message.model';
 
 let ioInstance: Server | null = null;
 
@@ -35,6 +36,12 @@ export function initializeSocket(httpServer: HttpServer) {
         connectedUsers.set(userId, new Set());
         // First time this user connected (from any device), broadcast online status
         io.emit('user_online', { userId });
+
+        // User came online -> cancel auto-delete for their messages
+        Message.updateMany(
+          { $or: [{ senderId: userId }, { receiverId: userId }] },
+          { $unset: { expiresAt: 1 } }
+        ).catch(err => console.error('[SOCKET] Failed to clear expiresAt for user', userId, err));
       }
       connectedUsers.get(userId)?.add(socket.id);
       
@@ -45,79 +52,36 @@ export function initializeSocket(httpServer: HttpServer) {
       socket.emit('initial_presence', { onlineUsers: onlineUserIds });
     });
 
-    // --- WebRTC & Chat ---
-    // Join a unique chat room based on user IDs
-    socket.on('join_chat', (data: { roomId: string }) => {
-      if (data && data.roomId) {
-        socket.join(data.roomId);
-        console.log(`[SOCKET] ${socket.id} joined room: ${data.roomId}`);
-        // Notify EVERYONE in the room that a peer joined (so the caller can re-send offer)
-        io.to(data.roomId).emit('peer_joined', { roomId: data.roomId });
-      }
-    });
-
-    socket.on('leave_chat', (data: { roomId: string }) => {
-      if (data && data.roomId) {
-        socket.leave(data.roomId);
-        console.log(`[SOCKET] ${socket.id} left room: ${data.roomId}`);
-      }
-    });
-
-    // --- Chat Request Handshake ---
-    socket.on('chat_request', async (data: { targetUserId: string; callerId: string; callerUsername: string }) => {
-      console.log(`[SOCKET] chat_request from ${data.callerId} to ${data.targetUserId}`);
-      
+    // --- Persistent Chat ---
+    socket.on('send_message', async (data: { senderId: string; receiverId: string; text: string }) => {
       try {
-        const caller = await User.findById(data.callerId).select('gender communityPreference');
-        const target = await User.findById(data.targetUserId).select('gender communityPreference');
+        const { senderId, receiverId, text } = data;
+        if (!senderId || !receiverId || !text) return;
+
+        // Check mutual friends
+        const isTargetFollowingCaller = await FollowerGraph.exists({ followerId: receiverId, followingId: senderId });
+        const isCallerFollowingTarget = await FollowerGraph.exists({ followerId: senderId, followingId: receiverId });
         
-        if (target && caller) {
-          // Check if they are mutual followers (friends)
-          const isTargetFollowingCaller = await FollowerGraph.exists({ followerId: target._id, followingId: caller._id });
-          const isCallerFollowingTarget = await FollowerGraph.exists({ followerId: caller._id, followingId: target._id });
-          const isMutualFriends = isTargetFollowingCaller && isCallerFollowingTarget;
-
-          if (!isMutualFriends) {
-            // Strictly enforce friends-only chat
-            emitToUser(data.callerId, 'chat_request_rejected', { targetUserId: data.targetUserId, callerId: data.callerId, reason: 'friends_only' });
-            return;
-          }
+        if (!isTargetFollowingCaller || !isCallerFollowingTarget) {
+          emitToUser(senderId, 'message_error', { error: 'You can only message mutual friends.' });
+          return;
         }
+
+        // Save to database
+        const newMessage = await Message.create({
+          senderId,
+          receiverId,
+          text
+        });
+
+        // Emit to receiver
+        emitToUser(receiverId, 'receive_message', newMessage);
+        // Also emit back to sender (useful if they have multiple devices)
+        emitToUser(senderId, 'receive_message', newMessage);
+
       } catch (err) {
-        console.error('[SOCKET] Error checking community preferences for chat:', err);
+        console.error('[SOCKET] send_message error:', err);
       }
-
-      emitToUser(data.targetUserId, 'chat_request', data);
-    });
-
-    socket.on('chat_request_accepted', (data: { targetUserId: string; callerId: string }) => {
-      console.log(`[SOCKET] chat_request_accepted from ${data.targetUserId} to ${data.callerId}`);
-      emitToUser(data.callerId, 'chat_request_accepted', data);
-    });
-
-    socket.on('chat_request_rejected', (data: { targetUserId: string; callerId: string }) => {
-      console.log(`[SOCKET] chat_request_rejected from ${data.targetUserId} to ${data.callerId}`);
-      emitToUser(data.callerId, 'chat_request_rejected', data);
-      emitToUser(data.targetUserId, 'chat_request_rejected', data);
-    });
-
-    // WebRTC Signaling: Offer
-    socket.on('webrtc_offer', (data: { roomId: string; offer: any }) => {
-      socket.to(data.roomId).emit('webrtc_offer', { offer: data.offer });
-    });
-
-    socket.on('request_webrtc_offer', (data: { roomId: string }) => {
-      socket.to(data.roomId).emit('request_webrtc_offer', { roomId: data.roomId });
-    });
-
-    // WebRTC Signaling: Answer
-    socket.on('webrtc_answer', (data: { roomId: string; answer: any }) => {
-      socket.to(data.roomId).emit('webrtc_answer', { answer: data.answer });
-    });
-
-    // WebRTC Signaling: ICE Candidate
-    socket.on('webrtc_ice_candidate', (data: { roomId: string; candidate: any }) => {
-      socket.to(data.roomId).emit('webrtc_ice_candidate', { candidate: data.candidate });
     });
 
     // --- Disconnect ---
@@ -135,6 +99,13 @@ export function initializeSocket(httpServer: HttpServer) {
             // User has no more active sockets, broadcast offline status
             io.emit('user_offline', { userId });
             console.log(`[SOCKET] User ${userId} went offline`);
+
+            // Auto-delete logic: set expiresAt to 2 hours from now
+            const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
+            Message.updateMany(
+              { $or: [{ senderId: userId }, { receiverId: userId }] },
+              { $set: { expiresAt: twoHoursFromNow } }
+            ).catch(err => console.error('[SOCKET] Failed to set expiresAt for user', userId, err));
           }
         }
       }
