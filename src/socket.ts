@@ -98,6 +98,7 @@ export function initializeSocket(httpServer: HttpServer) {
     socket.on('chat_request_rejected', (data: { targetUserId: string; callerId: string }) => {
       console.log(`[SOCKET] chat_request_rejected from ${data.targetUserId} to ${data.callerId}`);
       emitToUser(data.callerId, 'chat_request_rejected', data);
+      emitToUser(data.targetUserId, 'chat_request_rejected', data);
     });
 
     // WebRTC Signaling: Offer
