@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import { User } from './models/User.model';
 import FollowerGraph from './models/FollowerGraph.model';
 import Message from './models/Message.model';
+import Notification from './models/Notification.model';
 
 let ioInstance: Server | null = null;
 
@@ -73,11 +74,30 @@ export function initializeSocket(httpServer: HttpServer) {
           receiverId,
           text
         });
+        
+        const messageJson = newMessage.toJSON();
 
         // Emit to receiver
-        emitToUser(receiverId, 'receive_message', newMessage);
+        emitToUser(receiverId, 'receive_message', messageJson);
         // Also emit back to sender (useful if they have multiple devices)
-        emitToUser(senderId, 'receive_message', newMessage);
+        emitToUser(senderId, 'receive_message', messageJson);
+
+        // --- Notification logic ---
+        const existingNotif = await Notification.findOne({
+          recipient: receiverId,
+          actor: senderId,
+          type: 'message',
+          read: false
+        });
+
+        if (!existingNotif) {
+          await Notification.create({
+            recipient: receiverId,
+            actor: senderId,
+            type: 'message',
+          });
+          emitToUser(receiverId, 'new_notification', {});
+        }
 
       } catch (err) {
         console.error('[SOCKET] send_message error:', err);
@@ -101,10 +121,12 @@ export function initializeSocket(httpServer: HttpServer) {
         message.text = newText;
         message.isEdited = true;
         await message.save();
+        
+        const messageJson = message.toJSON();
 
         const receiverId = message.receiverId.toString();
-        emitToUser(receiverId, 'message_edited', message);
-        emitToUser(userId, 'message_edited', message);
+        emitToUser(receiverId, 'message_edited', messageJson);
+        emitToUser(userId, 'message_edited', messageJson);
       } catch (err) {
         console.error('[SOCKET] edit_message error:', err);
       }
@@ -127,10 +149,12 @@ export function initializeSocket(httpServer: HttpServer) {
         message.isDeleted = true;
         message.text = ''; // Clear content for privacy
         await message.save();
+        
+        const messageJson = message.toJSON();
 
         const receiverId = message.receiverId.toString();
-        emitToUser(receiverId, 'message_deleted', message);
-        emitToUser(userId, 'message_deleted', message);
+        emitToUser(receiverId, 'message_deleted', messageJson);
+        emitToUser(userId, 'message_deleted', messageJson);
       } catch (err) {
         console.error('[SOCKET] delete_message error:', err);
       }

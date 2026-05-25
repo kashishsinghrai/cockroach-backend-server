@@ -35,7 +35,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 10000): Promise<T> => 
 // ---------------------------------------------------------------------------
 export const createPost = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { content, useAudioUrl, originalAudioId, replySetting, poll } = req.body;
+    const { content, useAudioUrl, originalAudioId, replySetting, poll, youtubeUrl } = req.body;
     const userId = req.user?._id;
     const authorGender = req.user?.gender;
 
@@ -114,11 +114,12 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
-    const newPost = new Post({ 
+    const newPost = new Post({
       author: userId, 
       content, 
       mediaUrls, 
-      videoUrl, 
+      videoUrl,
+      youtubeUrl,
       audioUrl,
       originalAudioId: originalAudioId || undefined,
       mediaType,

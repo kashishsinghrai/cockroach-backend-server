@@ -6,6 +6,7 @@ export interface IPost extends Document {
   content: string;
   mediaUrls: string[];
   videoUrl?: string;
+  youtubeUrl?: string;
   mediaType: 'image' | 'video' | 'text';
   audioUrl?: string; // Extracted MP3 URL
   originalAudioId?: mongoose.Types.ObjectId; // Reference to the original post that provided the audio
@@ -33,6 +34,7 @@ const PostSchema: Schema = new Schema(
     content: { type: String, default: '', maxlength: 500 },
     mediaUrls: [{ type: String }],
     videoUrl: { type: String, required: false },
+    youtubeUrl: { type: String, required: false },
     audioUrl: { type: String, required: false },
     originalAudioId: { type: Schema.Types.ObjectId, ref: 'Post', required: false },
     mediaType: { type: String, enum: ['image', 'video', 'text'], default: 'text' },
