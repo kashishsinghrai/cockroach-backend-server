@@ -15,6 +15,8 @@ import {
   generateTokenPair, generateSessionId, extractDeviceFingerprint,
   extractClientIP, hashSHA256, verifyRefreshToken,
 } from '../utils/crypto';
+import { OAuth2Client } from 'google-auth-library';
+import crypto from 'crypto';
 
 // Token lifetimes are configured to match security vs UX trade-offs. 
 // A 7-day refresh ensures active users rarely need to log in manually, 
@@ -159,6 +161,101 @@ export async function login(req: Request, res: Response): Promise<void> {
   } catch (err: unknown) {
     console.error('[AUTH] Login error:', (err as Error).message);
     res.status(500).json({ success: false, error: 'Login failed' });
+  }
+}
+
+// -- GOOGLE LOGIN --
+export async function googleLogin(req: Request, res: Response): Promise<void> {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) { res.status(400).json({ success: false, error: 'idToken is required' }); return; }
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    let ticket;
+    try {
+      ticket = await client.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+    } catch (e) {
+      res.status(401).json({ success: false, error: 'Invalid Google Token' });
+      return;
+    }
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      res.status(400).json({ success: false, error: 'Could not get email from Google Token' });
+      return;
+    }
+
+    const email = payload.email.toLowerCase().trim();
+    let user = await User.findOne({ email }).select('+sessions +deviceFingerprints');
+
+    if (!user) {
+      // Create new user
+      const fp = extractDeviceFingerprint(req);
+      const ip = extractClientIP(req);
+      const ua = (req.headers['user-agent'] || 'unknown').slice(0, 512);
+
+      // Generate random secure password since they use Google Login
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      const randomUsername = `user_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      user = new User({
+        username: randomUsername,
+        email: email,
+        gender: 'other', // default
+        communityPreference: 'everyone',
+        passwordHash: randomPassword,
+        displayName: payload.name || 'New User',
+        avatarUrl: payload.picture || '',
+        accountStatus: AccountStatus.ACTIVE,
+        deviceFingerprints: [{ hash: fp, label: ua.slice(0, 64), firstSeen: new Date(), lastSeen: new Date(), trusted: true }],
+      });
+      await user.save();
+    } else {
+      if (user.isLockedOut()) { res.status(423).json({ success: false, error: 'Account locked. Try again later.' }); return; }
+      if (user.accountStatus === AccountStatus.SUSPENDED) { res.status(403).json({ success: false, error: 'Account suspended' }); return; }
+      if (user.accountStatus === AccountStatus.DEACTIVATED) { res.status(403).json({ success: false, error: 'Account deactivated' }); return; }
+      await user.resetFailedLogins();
+    }
+
+    const fp = extractDeviceFingerprint(req);
+    const ip = extractClientIP(req);
+    const ua = (req.headers['user-agent'] || 'unknown').slice(0, 512);
+    const sid = generateSessionId();
+    const tokens = generateTokenPair(user._id.toString(), sid, fp);
+
+    if (!user.sessions) user.sessions = [];
+    user.sessions = user.sessions.filter((s: ISession) => !s.isRevoked && new Date(s.expiresAt) > new Date());
+    
+    if (user.sessions.length >= MAX_SESSIONS) {
+      user.sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      user.sessions = user.sessions.slice(0, MAX_SESSIONS - 1);
+    }
+
+    user.sessions.push({
+      sessionId: sid, refreshTokenHash: hashSHA256(tokens.refreshToken),
+      deviceFingerprint: fp, ipAddress: ip, userAgent: ua,
+      createdAt: new Date(), expiresAt: new Date(Date.now() + REFRESH_TTL_MS), isRevoked: false,
+    });
+
+    const dev = user.deviceFingerprints.find((d) => d.hash === fp);
+    if (dev) { dev.lastSeen = new Date(); }
+    else { user.deviceFingerprints.push({ hash: fp, label: ua.slice(0, 64), firstSeen: new Date(), lastSeen: new Date(), trusted: false }); }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: { id: user._id, username: user.username, email: user.email, displayName: user.displayName, gender: user.gender, communityPreference: user.communityPreference, avatarUrl: user.avatarUrl, isVerified: user.isVerified, role: user.role },
+        tokens: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresIn: '15m' },
+      },
+    });
+  } catch (err: unknown) {
+    console.error('[AUTH] Google Login error:', (err as Error).message);
+    res.status(500).json({ success: false, error: 'Google Login failed' });
   }
 }
 

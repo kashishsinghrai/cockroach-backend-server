@@ -23,6 +23,7 @@ import {
   logout,
   logoutAll,
   changePassword,
+  googleLogin,
 } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/authenticate';
 
@@ -94,6 +95,7 @@ const logoutLimiter = rateLimit({
 // Public routes (no auth required)
 router.post('/register', registerLimiter, register);
 router.post('/login', loginLimiter, login);
+router.post('/google', loginLimiter, googleLogin);
 router.post('/refresh', refreshLimiter, refreshToken);
 
 // Protected routes (require valid session)
